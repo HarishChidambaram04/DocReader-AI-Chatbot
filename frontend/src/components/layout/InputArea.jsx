@@ -77,17 +77,33 @@ const InputArea = ({
   };
 
   const getChatLimitInfo = () => {
-    if (!isAuthenticated || !chatLimits.canChat) return null;
-    const remaining = chatLimits.remaining;
-    let textColor = 'text-green-600';
-    if (remaining <= 1) textColor = 'text-red-600';
-    else if (remaining <= 2) textColor = 'text-yellow-600';
+  if (!isAuthenticated) return null;
+  
+  const remaining = chatLimits.remaining;
+  
+  // ✅ Premium user (unlimited chats)
+  if (remaining === -1) {
     return (
-      <span className={`${textColor} text-sm`}>
-        {remaining} chat{remaining !== 1 ? 's' : ''} remaining
+      <span className="text-green-600 text-sm flex items-center gap-1">
+        <Crown className="w-4 h-4 text-yellow-500" />
+        <span className="font-semibold">Unlimited chats</span>
       </span>
     );
-  };
+  }
+  
+  // ✅ Free user with remaining chats
+  if (!chatLimits.canChat) return null;
+  
+  let textColor = 'text-green-600';
+  if (remaining <= 1) textColor = 'text-red-600';
+  else if (remaining <= 2) textColor = 'text-yellow-600';
+  
+  return (
+    <span className={`${textColor} text-sm`}>
+      {remaining} chat{remaining !== 1 ? 's' : ''} remaining
+    </span>
+  );
+};
 
   return (
     <div className="relative z-10 bg-transparent">

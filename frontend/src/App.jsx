@@ -14,7 +14,6 @@ import { useAuth } from './hooks/useAuth';
 import { useConversations } from './hooks/useConversations';
 import Payment from './components/Payment';
 
-
 const RAGChatbot = () => {
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
   const [showChatHistory, setShowChatHistory] = useState(false);
@@ -63,7 +62,7 @@ const RAGChatbot = () => {
     setChatLimits({
       remaining: newRemaining,
       used: newUsed,
-      canChat: newRemaining > 0
+      canChat: newRemaining > 0 || newRemaining === -1  // ✅ -1 = unlimited (premium)
     });
   }, [setChatLimits]);
 
@@ -85,27 +84,64 @@ const RAGChatbot = () => {
     testConnection
   } = useConnectionStatus(apiEndpoint);
 
-  // ✅ NEW: Open upgrade modal (called by both Header and InputArea)
+  // ✅ Open upgrade modal
   const handleOpenUpgradeModal = () => {
     console.log('Opening upgrade modal...');
     setShowUpgradeModal(true);
   };
 
-  // ✅ This function proceeds to payment after modal confirmation
+  // ✅ Handle successful upgrade - refresh user data
+  const handleUpgradeSuccess = async () => {
+    console.log('🎉 Upgrade successful! Refreshing user data...');
+    
+    try {
+      // Fetch updated user data from backend
+      const response = await fetch('http://localhost:8000/auth/me', {
+        headers: getAuthHeaders()
+      });
+      
+      if (response.ok) {
+        const userData = await response.json();
+        console.log('Updated user data:', userData);
+        
+        // ✅ Set unlimited chats (-1)
+        setChatLimits({
+          remaining: -1,  // -1 = unlimited for premium users
+          used: userData.chat_count || 0,
+          canChat: true
+        });
+        
+        alert('🎉 Welcome to Premium!\n\nYou now have unlimited chats!');
+      } else {
+        console.error('Failed to fetch updated user data');
+      }
+    } catch (error) {
+      console.error('Error refreshing user data:', error);
+    }
+    
+    // Close the modal
+    setShowUpgradeModal(false);
+  };
+
+  const handleCloseUpgradeModal = () => {
+    console.log('Closing upgrade modal');
+    setShowUpgradeModal(false);
+  };
+
+  // ✅ Backup: Old Payment.jsx flow (if you want to keep it)
   const handleUpgrade = () => {
     setShowUpgradeModal(false);
     setShowPayment(true);
   };
 
-  const handleCloseUpgradeModal = () => setShowUpgradeModal(false);
-
-  const handlePaymentSuccess = () => {
+  const handlePaymentSuccess = async () => {
     setShowPayment(false);
-    alert('Payment successful! You now have unlimited chats.');
+    await handleUpgradeSuccess();  // Reuse the upgrade success handler
   };
 
   const handlePaymentBack = () => setShowPayment(false);
 
+  // Show old payment page if needed
   if (showPayment) {
     return (
       <Payment onBack={handlePaymentBack} onSuccess={handlePaymentSuccess} />
@@ -124,8 +160,8 @@ const RAGChatbot = () => {
       return;
     }
 
-    if (chatLimits && !chatLimits.canChat) {
-      // ✅ Open modal instead of directly blocking
+    // ✅ Check chat limits (allow if premium: remaining === -1)
+    if (chatLimits && !chatLimits.canChat && chatLimits.remaining !== -1) {
       handleOpenUpgradeModal();
       return;
     }
@@ -184,7 +220,8 @@ const RAGChatbot = () => {
             onLogout={logout}
             sidePanelOpen={sidePanelOpen}
             setSidePanelOpen={setSidePanelOpen}
-            onOpenUpgradeModal={handleOpenUpgradeModal}  // ✅ Pass handler
+            onOpenUpgradeModal={handleOpenUpgradeModal}
+            chatLimits={chatLimits}
           />
           <div className="flex-1 flex items-center justify-center">
             <AuthInterface
@@ -238,7 +275,8 @@ const RAGChatbot = () => {
           onLogout={logout}
           sidePanelOpen={sidePanelOpen}
           setSidePanelOpen={setSidePanelOpen}
-          onOpenUpgradeModal={handleOpenUpgradeModal}  // ✅ Pass handler
+          onOpenUpgradeModal={handleOpenUpgradeModal}
+          chatLimits={chatLimits}
         />
 
         <MessageList messages={messages} isLoading={isLoading} user={user} />
@@ -249,15 +287,17 @@ const RAGChatbot = () => {
           isLoading={isLoading}
           isAuthenticated={isAuthenticated}
           chatLimits={chatLimits}
-          onOpenUpgradeModal={handleOpenUpgradeModal}  // ✅ Changed from onUpgrade
+          onOpenUpgradeModal={handleOpenUpgradeModal}
         />
       </div>
 
-      {/* ✅ Modal controlled by App.jsx */}
+      {/* ✅ Razorpay upgrade modal with backend integration */}
       {showUpgradeModal && (
         <UpgradePrompt 
-          onUpgrade={handleUpgrade}  // Go to payment
-          onClose={handleCloseUpgradeModal}  // Close modal
+          onClose={handleCloseUpgradeModal}
+          user={user}  // ✅ Pass user object
+          getAuthHeaders={getAuthHeaders}  // ✅ Pass auth headers
+          onUpgradeSuccess={handleUpgradeSuccess}  // ✅ Pass success callback
         />
       )}
     </div>

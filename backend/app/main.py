@@ -74,9 +74,14 @@ async def upgrade_endpoint():
 # ============================================
 # CHAT ROUTES
 # ============================================
+# BackgroundTasks parameter
 @app.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest, background_tasks: BackgroundTasks, current_user: UserInfo = Depends(check_chat_limit)):
-    return await chat(request, current_user)
+async def chat_endpoint(
+    request: ChatRequest,
+    background_tasks: BackgroundTasks,  # ✅ ADD THIS
+    current_user: UserInfo = Depends(check_chat_limit)
+):
+    return await chat(request, current_user, background_tasks) 
 
 @app.post("/debug")
 async def debug_endpoint(request: ChatRequest, current_user: UserInfo = Depends(get_current_user)):

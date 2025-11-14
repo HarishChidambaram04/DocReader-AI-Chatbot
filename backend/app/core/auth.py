@@ -112,14 +112,38 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 # Dependency to check if user can chat
 async def check_chat_limit(current_user: UserInfo = Depends(get_current_user)) -> UserInfo:
-    """FastAPI dependency to check if user has remaining chats"""
-    if not SessionManager.can_chat(current_user.google_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "message": "You've used all free chats. Upgrade to premium to continue.",
-                "remaining_chats": 0,
-                "upgrade_required": True
-            }
-        )
-    return current_user
+    """
+    Check if user can send messages
+    Premium users have unlimited chats
+    """
+    try:
+        # ✅ Check if user is premium first
+        is_premium = firebase_service.is_premium_user(current_user.google_id)
+        
+        if is_premium:
+            logger.info(f"✅ Premium user {current_user.email} - unlimited chats")
+            return current_user  # Allow chat
+        
+        # Free user - check limit
+        remaining = firebase_service.get_remaining_chats(current_user.google_id)
+        
+        if remaining <= 0:
+            logger.warning(f"⛔ User {current_user.email} has no chats remaining")
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "message": "You've used all your free chats. Upgrade to premium for unlimited access!",
+                    "remaining_chats": 0,
+                    "is_premium": False,
+                    "upgrade_required": True
+                }
+            )
+        
+        logger.info(f"✅ User {current_user.email} has {remaining} chats remaining")
+        return current_user
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error checking chat limit: {e}")
+        raise HTTPException(status_code=500, detail="Error checking chat limits")

@@ -507,6 +507,79 @@ class FirebaseService:
             logger.error(f"Traceback: {traceback.format_exc()}")
             return False
     
-    
+    def is_premium_user(self, google_id: str) -> bool:
+        """Check if user has premium subscription"""
+        if not self.initialized:
+            return False
+            
+        try:
+            user_data = self.get_user(google_id)
+            if user_data:
+                return user_data.get('is_premium', False)
+            return False
+        except Exception as e:
+            logger.error(f"Error checking premium status: {e}")
+            return False
+
+
+    def upgrade_to_premium(self, google_id: str, payment_details: dict = None) -> bool:
+        """Upgrade user to premium (unlimited chats)"""
+        if not self.initialized:
+            logger.error("Firebase not initialized")
+            return False
+            
+        try:
+            user_ref = self.db.collection('users').document(google_id)
+            user_doc = user_ref.get()
+            
+            if not user_doc.exists:
+                logger.error(f"User {google_id} not found")
+                return False
+            
+            from datetime import datetime
+            
+            # Update user to premium
+            update_data = {
+                'is_premium': True,
+                'plan_type': 'premium',
+                'upgraded_at': datetime.utcnow(),
+                'updated_at': datetime.utcnow()
+            }
+            
+            # Store payment details
+            if payment_details:
+                update_data['payment_details'] = payment_details
+            
+            user_ref.update(update_data)
+            
+            logger.info(f"✅ Upgraded user {google_id} to premium")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error upgrading user {google_id} to premium: {e}")
+            return False
+
+
+    def get_remaining_chats(self, google_id: str) -> int:
+        """
+        Get remaining chats for user
+        Returns -1 for premium users (unlimited)
+        """
+        try:
+            user_data = self.get_user(google_id)
+            if not user_data:
+                return 3  # New user gets 3 free chats
+            
+            # ✅ Check if premium - return -1 for unlimited
+            if user_data.get('is_premium', False):
+                return -1  # -1 means unlimited
+            
+            # Free user - calculate remaining
+            chat_count = user_data.get('chat_count', 0)
+            return max(0, 3 - chat_count)
+            
+        except Exception as e:
+            logger.error(f"Error getting remaining chats for {google_id}: {e}")
+            return 0
 # Global Firebase service instance
 firebase_service = FirebaseService()

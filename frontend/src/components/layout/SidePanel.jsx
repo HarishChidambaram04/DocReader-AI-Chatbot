@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { X, MessageSquarePlus, Search, Trash2, BookOpen } from "lucide-react";
 import Library from "../library/Library";
 
@@ -11,10 +11,12 @@ const SidePanel = ({
   onNewConversation = null,
   onDeleteConversation = null,
   isLoading = false,
-  getAuthHeaders  // ← Add this prop
+  getAuthHeaders
 }) => {
   const togglePanel = () => setIsOpen(!isOpen);
-  const [libraryOpen, setLibraryOpen] = useState(false);  // ← Add library state
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
 
   const handleNewChat = () => {
     console.log("✅ New Chat clicked!");
@@ -27,6 +29,25 @@ const SidePanel = ({
     console.log("📌 SidePanel: Selecting conversation:", conversation.id);
     if (onSelectConversation) {
       onSelectConversation(conversation);
+    }
+  };
+
+  // Filter conversations based on search term
+  const filteredConversations = useMemo(() => {
+    if (!searchTerm.trim()) return conversations;
+    
+    const term = searchTerm.toLowerCase();
+    return conversations.filter(conv => 
+      (conv.title && conv.title.toLowerCase().includes(term)) ||
+      (conv.last_message && conv.last_message.toLowerCase().includes(term))
+    );
+  }, [conversations, searchTerm]);
+
+  // Toggle search and clear on close
+  const handleToggleSearch = () => {
+    setShowSearch(!showSearch);
+    if (showSearch) {
+      setSearchTerm("");
     }
   };
 
@@ -53,6 +74,7 @@ const SidePanel = ({
 
           {/* Top Menu Items */}
           <div className="flex flex-col p-4 space-y-3 text-gray-700">
+            {/* New Chat Button */}
             <button 
               onClick={handleNewChat}
               className="flex items-center space-x-3 p-2 rounded-md hover:bg-blue-100 transition-all bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200"
@@ -61,24 +83,59 @@ const SidePanel = ({
               <span className="font-medium text-blue-700">New Chat</span>
             </button>
 
-            {/* ✅ Library Button - NEW */}
+            {/* Data Library Button */}
             <button 
               onClick={() => setLibraryOpen(true)}
-              className="flex items-center space-x-3 p-2 rounded-md hover:bg-purple-100 transition-all bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200"
+              className="flex items-center space-x-3 p-2 rounded-md hover:bg-blue-100 transition-all bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200"
             >
-              <BookOpen className="w-5 h-5 text-purple-600" />
-              <span className="font-medium text-purple-700">Data Library</span>
+              <BookOpen className="w-5 h-5 text-blue-600" />
+              <span className="font-medium text-blue-700">Data Library</span>
             </button>
 
-            <button className="flex items-center space-x-3 p-2 rounded-md hover:bg-gray-100 transition-all">
-              <Search className="w-5 h-5" />
-              <span>Search Chats</span>
+            {/* ✅ Search Button - BLUE */}
+            <button 
+              onClick={handleToggleSearch}
+              className={`flex items-center space-x-3 p-2 rounded-md transition-all ${
+                showSearch 
+                  ? 'bg-blue-200 hover:bg-blue-300 bg-gradient-to-r from-blue-100 to-cyan-100 border border-blue-300' 
+                  : 'bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 hover:bg-blue-100'
+              }`}
+            >
+              <Search className="w-5 h-5 text-blue-600" />
+              <span className="font-medium text-blue-700">Search Chats</span>
             </button>
+
+            {/* Search Input */}
+            {showSearch && (
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search conversations..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full px-3 py-2 pr-8 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  autoFocus
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Divider */}
-          <div className="px-4 mt-4 text-gray-600 font-semibold text-sm">
-            Chats
+          {/* Show search results count */}
+          <div className="px-4 mt-4 text-gray-600 font-semibold text-sm flex items-center justify-between">
+            <span>Chats</span>
+            {searchTerm && (
+              <span className="text-xs text-blue-600">
+                {filteredConversations.length} result{filteredConversations.length !== 1 ? 's' : ''}
+              </span>
+            )}
           </div>
 
           {/* Chat History */}
@@ -87,17 +144,26 @@ const SidePanel = ({
               <div className="p-3 text-center text-gray-500">
                 <p className="text-sm animate-pulse">Loading conversations...</p>
               </div>
-            ) : !conversations || conversations.length === 0 ? (
+            ) : !filteredConversations || filteredConversations.length === 0 ? (
               <div className="text-center text-gray-500 py-6 px-3">
-                <p className="text-sm">No conversations yet.</p>
-                <p className="text-xs text-gray-400 mt-2">Click "New Chat" to start</p>
+                {searchTerm ? (
+                  <>
+                    <p className="text-sm">No conversations found</p>
+                    <p className="text-xs text-gray-400 mt-2">Try a different search term</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm">No conversations yet.</p>
+                    <p className="text-xs text-gray-400 mt-2">Click "New Chat" to start</p>
+                  </>
+                )}
               </div>
             ) : (
               <div>
                 <p className="text-xs font-semibold text-gray-600 mb-2 px-1">
-                  Recent ({conversations.length})
+                  {searchTerm ? 'Search Results' : 'Recent'} ({filteredConversations.length})
                 </p>
-                {conversations.map((conv, idx) => (
+                {filteredConversations.map((conv, idx) => (
                   <div
                     key={conv.id || idx}
                     onClick={() => handleSelectConversation(conv)}
@@ -141,7 +207,7 @@ const SidePanel = ({
         />
       )}
 
-      {/* ✅ Library Modal - NEW */}
+      {/* Library Modal */}
       {libraryOpen && (
         <Library
           isOpen={libraryOpen}

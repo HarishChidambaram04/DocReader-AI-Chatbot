@@ -45,17 +45,18 @@ export const useAuth = () => {
 
       const data = await loginResponse.json();
       
-      // ✅ FIX: Get actual chat_count from backend (don't calculate!)
       const chatCount = data.user?.chat_count || data.chat_count || 0;
       
       // Store token and user info
       setToken(data.access_token);
       setUser(data.user);
       setIsAuthenticated(true);
+      
+      // ✅ FIX 1: Handle -1 for unlimited (premium users)
       setChatLimits({
         remaining: data.remaining_chats,
-        used: chatCount,  // ✅ FIXED: Use actual DB value
-        canChat: data.remaining_chats > 0
+        used: chatCount,
+        canChat: data.remaining_chats > 0 || data.remaining_chats === -1  // ✅ FIXED!
       });
 
       // Store in localStorage
@@ -63,11 +64,14 @@ export const useAuth = () => {
       localStorage.setItem('user_info', JSON.stringify(data.user));
 
       console.log('Login successful:', data.user.email);
-      console.log('Chat limits:', { remaining: data.remaining_chats, used: chatCount });
+      console.log('Chat limits:', { 
+        remaining: data.remaining_chats, 
+        used: chatCount,
+        canChat: data.remaining_chats > 0 || data.remaining_chats === -1
+      });
       
     } catch (error) {
       console.error('Login error:', error);
-      // Clear any stored data on error
       logout();
     } finally {
       setIsLoading(false);
@@ -103,13 +107,14 @@ export const useAuth = () => {
 
       if (response.ok) {
         const data = await response.json();
+        
+        // ✅ FIX 2: Handle -1 for unlimited
         setChatLimits({
           remaining: data.remaining_chats,
-          used: data.chat_count,  // ✅ Already using correct value here
-          canChat: data.can_chat
+          used: data.chat_count,
+          canChat: data.remaining_chats > 0 || data.remaining_chats === -1  // ✅ FIXED!
         });
       } else if (response.status === 401) {
-        // Token expired or invalid
         logout();
       }
     } catch (error) {
@@ -131,13 +136,15 @@ export const useAuth = () => {
 
       if (response.ok) {
         const data = await response.json();
-        // ✅ FIX: Don't calculate used, get it from backend
+        
+        // ✅ FIX 3: Handle -1 for unlimited
         setChatLimits({
           remaining: data.remaining_chats,
-          used: LIMITS.FREE_CHAT_LIMIT - data.remaining_chats,  // This is OK for limits check
-          canChat: data.remaining_chats > 0
+          used: LIMITS.FREE_CHAT_LIMIT - data.remaining_chats,
+          canChat: data.remaining_chats > 0 || data.remaining_chats === -1  // ✅ FIXED!
         });
-        return data.remaining_chats > 0;
+        
+        return data.remaining_chats > 0 || data.remaining_chats === -1;
       }
       return false;
     } catch (error) {
@@ -157,7 +164,6 @@ export const useAuth = () => {
 
   // Initialize authentication on mount
   useEffect(() => {
-    // Check if user was previously logged in
     const storedToken = localStorage.getItem('auth_token');
     const storedUser = localStorage.getItem('user_info');
 
@@ -187,34 +193,27 @@ export const useAuth = () => {
     }
   }, []);
 
-  // ✅ NEW: Update chat limits with both remaining and used count
+  // ✅ FIX 4: Update chat limits with unlimited support
   const updateChatLimits = useCallback((newRemaining, newUsed) => {
     setChatLimits({
       remaining: newRemaining,
-      used: newUsed,  // ✅ Use actual count from backend
-      canChat: newRemaining > 0
+      used: newUsed,
+      canChat: newRemaining > 0 || newRemaining === -1  // ✅ FIXED!
     });
   }, []);
 
   return {
-    // Auth state
     user,
     token,
     isAuthenticated,
     isLoading,
-    
-    // Chat limits
     chatLimits,
-    setChatLimits,  // ✅ Export this so App.jsx can use it
-    
-    // Actions
+    setChatLimits,
     logout,
     fetchUserStatus,
     checkChatLimits,
     updateChatLimits,
     getAuthHeaders,
-    
-    // Google OAuth
     initializeGoogleAuth
   };
 };
