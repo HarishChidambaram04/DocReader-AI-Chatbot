@@ -581,5 +581,24 @@ class FirebaseService:
         except Exception as e:
             logger.error(f"Error getting remaining chats for {google_id}: {e}")
             return 0
+        
+    def log_payment_failure(self, user_id: str, failure_record: dict) -> bool:
+        """Log payment failure for analytics"""
+        try:
+            if not self.initialized:
+                return False
+            
+            self.db.collection('payment_failures').add({
+                'user_id': user_id,
+                **failure_record,
+                'created_at': firestore.SERVER_TIMESTAMP
+            })
+            
+            logger.info(f"✅ Payment failure logged for user: {user_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error logging payment failure: {e}")
+            return False
 # Global Firebase service instance
 firebase_service = FirebaseService()

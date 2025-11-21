@@ -11,16 +11,31 @@ from app.core.auth import get_current_user
 from app.models.schemas import UserInfo
 import logging
 
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
 
 razorpay_client = razorpay.Client(
     auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
 )
 
+
 class OrderRequest(BaseModel):
     amount: int  # in paise
     currency: str = "INR"
+
+
+# ✅ NEW: Payment failure model
+class PaymentFailure(BaseModel):
+    order_id: str
+    payment_id: str | None = None
+    error_code: str
+    error_description: str
+    error_source: str | None = None
+    error_step: str | None = None
+    error_reason: str | None = None
+    user_id: str
 
 
 @router.post("/create-order")
@@ -60,7 +75,7 @@ async def verify_payment(request: Request):
         order_id = body.get("razorpay_order_id")
         payment_id = body.get("razorpay_payment_id")
         signature = body.get("razorpay_signature")
-        user_id = body.get("user_id")  # ✅ Get user_id from frontend
+        user_id = body.get("user_id")
         
         logger.info(f"💳 Verifying payment for user: {user_id}, payment_id: {payment_id}")
 
@@ -108,4 +123,125 @@ async def verify_payment(request: Request):
         raise
     except Exception as e:
         logger.error(f"❌ Payment verification failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ✅ NEW: Payment failure endpoint
+@router.post("/payment-failed")
+async def payment_failed(failure: PaymentFailure):
+    """Handle payment failures and log them"""
+    try:
+        logger.warning(f"❌ Payment failed for user: {failure.user_id}")
+        logger.warning(f"   Order ID: {failure.order_id}")
+        logger.warning(f"   Error: {failure.error_code} - {failure.error_description}")
+        logger.warning(f"   Source: {failure.error_source}, Step: {failure.error_step}")
+        logger.warning(f"   Reason: {failure.error_reason}")
+        
+        # ✅ Log failure to Firebase for analytics/tracking
+        failure_record = {
+            'user_id': failure.user_id,
+            'order_id': failure.order_id,
+            'payment_id': failure.payment_id,
+            'error_code': failure.error_code,
+            'error_description': failure.error_description,
+            'error_source': failure.error_source,
+            'error_step': failure.error_step,
+            'error_reason': failure.error_reason,
+            'timestamp': datetime.utcnow().isoformat(),
+            'status': 'failed'
+        }
+        
+        # Save to Firebase (optional - for tracking failed payments)
+        firebase_service.log_payment_failure(failure.user_id, failure_record)
+        
+        return {
+            "status": "failure_logged",
+            "message": "Payment failure has been recorded",
+            "user_message": get_user_friendly_message(failure.error_code)
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error logging payment failure: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ✅ NEW: User-friendly error messages
+def get_user_friendly_message(error_code: str) -> str:
+    """Convert Razorpay error codes to user-friendly messages"""
+    error_messages = {
+        'BAD_REQUEST_ERROR': 'Payment request failed. Please try again.',
+        'GATEWAY_ERROR': 'Payment gateway error. Please try again in a few minutes.',
+        'SERVER_ERROR': 'Server error occurred. Please try again later.',
+        'incorrect_otp': 'Incorrect OTP entered. Please retry with the correct OTP.',
+        'incorrect_pin': 'Incorrect PIN entered. Please retry with the correct PIN.',
+        'payment_timeout': 'Payment timed out. Please try again.',
+        'payment_cancelled': 'Payment was cancelled. You can retry anytime.',
+        'insufficient_funds': 'Insufficient funds in your account.',
+        'transaction_declined': 'Transaction was declined by your bank.',
+        'authentication_failed': 'Payment authentication failed. Please try again.',
+        'invalid_card_number': 'Invalid card number. Please check and retry.',
+        'card_expired': 'Your card has expired. Please use another card.',
+        'network_error': 'Network error occurred. Please check your connection and retry.',
+    }
+    
+    return error_messages.get(error_code, 'Payment failed. Please try again or contact support.')
+
+
+# ✅ NEW: Webhook endpoint for Razorpay notifications
+@router.post("/webhook")
+async def razorpay_webhook(request: Request):
+    """Handle Razorpay webhook notifications"""
+    try:
+        # Get webhook secret from settings
+        webhook_secret = getattr(settings, 'RAZORPAY_WEBHOOK_SECRET', None)
+        
+        if webhook_secret:
+            # Verify webhook signature
+            signature = request.headers.get('X-Razorpay-Signature')
+            body = await request.body()
+            
+            expected_signature = hmac.new(
+                bytes(webhook_secret, 'utf-8'),
+                body,
+                hashlib.sha256
+            ).hexdigest()
+            
+            if signature != expected_signature:
+                logger.error("❌ Invalid webhook signature")
+                raise HTTPException(status_code=400, detail="Invalid signature")
+        
+        # Parse webhook payload
+        payload = await request.json()
+        event = payload.get('event')
+        
+        logger.info(f"🔔 Webhook received: {event}")
+        
+        if event == 'payment.failed':
+            # Handle failed payment webhook
+            payment_entity = payload.get('payload', {}).get('payment', {}).get('entity', {})
+            order_id = payment_entity.get('order_id')
+            payment_id = payment_entity.get('id')
+            error = payment_entity.get('error_code')
+            description = payment_entity.get('error_description')
+            
+            logger.warning(f"❌ Webhook: Payment failed - Order: {order_id}, Error: {error}")
+            
+            # Log to Firebase
+            firebase_service.log_payment_failure('webhook', {
+                'order_id': order_id,
+                'payment_id': payment_id,
+                'error_code': error,
+                'error_description': description,
+                'timestamp': datetime.utcnow().isoformat()
+            })
+            
+        elif event == 'payment.captured':
+            logger.info(f"✅ Webhook: Payment captured")
+            
+        return {"status": "webhook_processed"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Webhook processing error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
