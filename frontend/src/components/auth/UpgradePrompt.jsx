@@ -44,13 +44,13 @@ const UpgradePrompt = ({ onClose, user, getAuthHeaders, onUpgradeSuccess }) => {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                ...getAuthHeaders()
+                ...getAuthHeaders()  // ✅ JWT contains user identity
               },
               body: JSON.stringify({
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
-                user_id: user.google_id,
+                // ✅ REMOVED: user_id (backend gets it from JWT token)
                 amount: amount,
                 currency: currency
               })
@@ -61,12 +61,17 @@ const UpgradePrompt = ({ onClose, user, getAuthHeaders, onUpgradeSuccess }) => {
             if (verifyResponse.ok && result.status === 'success') {
               console.log('✅ Payment verified successfully');
               onUpgradeSuccess();
+            } else if (result.status === 'already_processed') {
+              // ✅ Handle duplicate payment gracefully
+              console.log('⚠️ Payment already processed');
+              alert('✅ Payment already verified!\n\nYour premium access is active.');
+              onUpgradeSuccess();
             } else {
               alert('⚠️ Payment verification failed. Please contact support with payment ID: ' + response.razorpay_payment_id);
             }
           } catch (error) {
             console.error('Verification error:', error);
-            alert('⚠️ Payment verification failed. Please contact support.');
+            alert('⚠️ Payment verification failed. Please contact support with payment ID: ' + response.razorpay_payment_id);
           }
         },
         
@@ -79,7 +84,6 @@ const UpgradePrompt = ({ onClose, user, getAuthHeaders, onUpgradeSuccess }) => {
           color: "#1E88E5",
         },
         
-        // ✅ NEW: Payment failure handler
         modal: {
           ondismiss: function() {
             console.log('💬 Payment modal closed by user');
@@ -89,7 +93,7 @@ const UpgradePrompt = ({ onClose, user, getAuthHeaders, onUpgradeSuccess }) => {
 
       const rzp = new window.Razorpay(options);
       
-      // ✅ NEW: Listen for payment.failed event
+      // ✅ Payment failure handler
       rzp.on('payment.failed', async function (response) {
         console.error('❌ Payment failed:', response.error);
         
@@ -130,7 +134,7 @@ const UpgradePrompt = ({ onClose, user, getAuthHeaders, onUpgradeSuccess }) => {
     }
   };
 
-  // ✅ NEW: User-friendly error messages
+  // ✅ User-friendly error messages
   const getUserFriendlyError = (code, description) => {
     const errors = {
       'BAD_REQUEST_ERROR': 'Invalid payment request. Please try again.',

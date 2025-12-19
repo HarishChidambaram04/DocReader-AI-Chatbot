@@ -11,22 +11,17 @@ from app.core.auth import get_current_user
 from app.models.schemas import UserInfo
 import logging
 
-
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
 
 razorpay_client = razorpay.Client(
     auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
 )
 
-
 class OrderRequest(BaseModel):
     amount: int  # in paise
     currency: str = "INR"
 
-
-# ✅ NEW: Payment failure model
 class PaymentFailure(BaseModel):
     order_id: str
     payment_id: str | None = None
@@ -67,7 +62,10 @@ async def create_order(
 
 
 @router.post("/verify-payment")
-async def verify_payment(request: Request):
+async def verify_payment(
+    request: Request,
+    current_user: UserInfo = Depends(get_current_user)  # ✅ ADDED AUTHENTICATION
+):
     """Verify payment and upgrade user to premium"""
     try:
         body = await request.json()
@@ -75,12 +73,25 @@ async def verify_payment(request: Request):
         order_id = body.get("razorpay_order_id")
         payment_id = body.get("razorpay_payment_id")
         signature = body.get("razorpay_signature")
-        user_id = body.get("user_id")
+        
+        # ✅ Use authenticated user's ID (not from request body)
+        user_id = current_user.google_id
         
         logger.info(f"💳 Verifying payment for user: {user_id}, payment_id: {payment_id}")
 
-        if not all([order_id, payment_id, signature, user_id]):
+        if not all([order_id, payment_id, signature]):
             raise HTTPException(status_code=400, detail="Missing required fields")
+
+        # ✅ Check for duplicate payment
+        existing_payment = firebase_service.get_payment_by_id(payment_id)
+        if existing_payment:
+            logger.warning(f"⚠️ Duplicate payment attempt: {payment_id}")
+            return {
+                "status": "already_processed",
+                "message": "Payment already verified and premium activated",
+                "is_premium": True,
+                "unlimited_chats": True
+            }
 
         # ✅ Verify signature
         generated_signature = hmac.new(
@@ -126,7 +137,6 @@ async def verify_payment(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ✅ NEW: Payment failure endpoint
 @router.post("/payment-failed")
 async def payment_failed(failure: PaymentFailure):
     """Handle payment failures and log them"""
@@ -137,7 +147,6 @@ async def payment_failed(failure: PaymentFailure):
         logger.warning(f"   Source: {failure.error_source}, Step: {failure.error_step}")
         logger.warning(f"   Reason: {failure.error_reason}")
         
-        # ✅ Log failure to Firebase for analytics/tracking
         failure_record = {
             'user_id': failure.user_id,
             'order_id': failure.order_id,
@@ -151,7 +160,6 @@ async def payment_failed(failure: PaymentFailure):
             'status': 'failed'
         }
         
-        # Save to Firebase (optional - for tracking failed payments)
         firebase_service.log_payment_failure(failure.user_id, failure_record)
         
         return {
@@ -165,7 +173,6 @@ async def payment_failed(failure: PaymentFailure):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ✅ NEW: User-friendly error messages
 def get_user_friendly_message(error_code: str) -> str:
     """Convert Razorpay error codes to user-friendly messages"""
     error_messages = {
@@ -187,16 +194,13 @@ def get_user_friendly_message(error_code: str) -> str:
     return error_messages.get(error_code, 'Payment failed. Please try again or contact support.')
 
 
-# ✅ NEW: Webhook endpoint for Razorpay notifications
 @router.post("/webhook")
 async def razorpay_webhook(request: Request):
     """Handle Razorpay webhook notifications"""
     try:
-        # Get webhook secret from settings
         webhook_secret = getattr(settings, 'RAZORPAY_WEBHOOK_SECRET', None)
         
         if webhook_secret:
-            # Verify webhook signature
             signature = request.headers.get('X-Razorpay-Signature')
             body = await request.body()
             
@@ -210,14 +214,12 @@ async def razorpay_webhook(request: Request):
                 logger.error("❌ Invalid webhook signature")
                 raise HTTPException(status_code=400, detail="Invalid signature")
         
-        # Parse webhook payload
         payload = await request.json()
         event = payload.get('event')
         
         logger.info(f"🔔 Webhook received: {event}")
         
         if event == 'payment.failed':
-            # Handle failed payment webhook
             payment_entity = payload.get('payload', {}).get('payment', {}).get('entity', {})
             order_id = payment_entity.get('order_id')
             payment_id = payment_entity.get('id')
@@ -226,7 +228,6 @@ async def razorpay_webhook(request: Request):
             
             logger.warning(f"❌ Webhook: Payment failed - Order: {order_id}, Error: {error}")
             
-            # Log to Firebase
             firebase_service.log_payment_failure('webhook', {
                 'order_id': order_id,
                 'payment_id': payment_id,

@@ -521,9 +521,30 @@ class FirebaseService:
             logger.error(f"Error checking premium status: {e}")
             return False
 
+    def get_payment_by_id(self, payment_id: str) -> Optional[Dict]:
+        """Check if payment already processed - prevents duplicate payments"""
+        try:
+            if not self.initialized:
+                return None
+                
+            payments_ref = self.db.collection('payments')
+            query = payments_ref.where('payment_id', '==', payment_id).limit(1)
+            docs = list(query.stream())
+            
+            if docs:
+                payment_data = docs[0].to_dict()
+                logger.info(f"Found existing payment: {payment_id}")
+                return payment_data
+            
+            logger.info(f"No existing payment found for: {payment_id}")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error checking payment {payment_id}: {e}")
+            return None
 
     def upgrade_to_premium(self, google_id: str, payment_details: dict = None) -> bool:
-        """Upgrade user to premium (unlimited chats)"""
+        """Upgrade user to premium (unlimited chats) and store payment record"""
         if not self.initialized:
             logger.error("Firebase not initialized")
             return False
@@ -536,8 +557,6 @@ class FirebaseService:
                 logger.error(f"User {google_id} not found")
                 return False
             
-            from datetime import datetime
-            
             # Update user to premium
             update_data = {
                 'is_premium': True,
@@ -546,19 +565,33 @@ class FirebaseService:
                 'updated_at': datetime.utcnow()
             }
             
-            # Store payment details
-            if payment_details:
-                update_data['payment_details'] = payment_details
-            
             user_ref.update(update_data)
+            logger.info(f"✅ User {google_id} marked as premium")
             
-            logger.info(f"✅ Upgraded user {google_id} to premium")
+            # ✅ Store payment separately for records and duplicate prevention
+            if payment_details:
+                payment_record = {
+                    'user_id': google_id,
+                    'payment_id': payment_details.get('payment_id'),
+                    'order_id': payment_details.get('order_id'),
+                    'amount': payment_details.get('amount', 0),
+                    'currency': payment_details.get('currency', 'INR'),
+                    'status': 'success',
+                    'payment_date': payment_details.get('payment_date'),
+                    'verified_at': datetime.utcnow(),
+                    'created_at': firestore.SERVER_TIMESTAMP
+                }
+                
+                self.db.collection('payments').add(payment_record)
+                logger.info(f"✅ Payment record saved: {payment_details.get('payment_id')}")
+            
             return True
             
         except Exception as e:
             logger.error(f"Error upgrading user {google_id} to premium: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return False
-
 
     def get_remaining_chats(self, google_id: str) -> int:
         """
