@@ -11,7 +11,11 @@ const SidePanel = ({
   onNewConversation = null,
   onDeleteConversation = null,
   isLoading = false,
-  getAuthHeaders
+  getAuthHeaders,
+  // ✅ NEW: Receive premium props
+  user,
+  chatLimits,
+  onOpenUpgradeModal
 }) => {
   const togglePanel = () => setIsOpen(!isOpen);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -92,7 +96,7 @@ const SidePanel = ({
               <span className="font-medium text-blue-700">Data Library</span>
             </button>
 
-            {/* ✅ Search Button - BLUE */}
+            {/* Search Button */}
             <button 
               onClick={handleToggleSearch}
               className={`flex items-center space-x-3 p-2 rounded-md transition-all ${
@@ -213,6 +217,10 @@ const SidePanel = ({
           isOpen={libraryOpen}
           onClose={() => setLibraryOpen(false)}
           getAuthHeaders={getAuthHeaders}
+          // ✅ FIXED: Pass premium props
+          user={user}
+          chatLimits={chatLimits}
+          onOpenUpgradeModal={onOpenUpgradeModal}
         />
       )}
     </>

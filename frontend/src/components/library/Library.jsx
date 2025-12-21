@@ -1,8 +1,8 @@
 // components/library/Library.jsx
 import React, { useState, useEffect } from 'react';
-import { Search, Download, X, Grid, List } from 'lucide-react';
+import { Search, Download, X, Grid, List, Crown } from 'lucide-react';
 
-const Library = ({ isOpen, onClose, getAuthHeaders }) => {
+const Library = ({ isOpen, onClose, getAuthHeaders, user, chatLimits, onOpenUpgradeModal }) => {
   const [domains, setDomains] = useState([]);
   const [filteredDomains, setFilteredDomains] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -12,6 +12,9 @@ const Library = ({ isOpen, onClose, getAuthHeaders }) => {
   const [loading, setLoading] = useState(true);
   const [selectedDomain, setSelectedDomain] = useState(null);
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
+
+  // ✅ Check if user is premium
+  const isPremium = chatLimits?.remaining === -1;
 
   // Fetch domains on mount
   useEffect(() => {
@@ -63,13 +66,26 @@ const Library = ({ isOpen, onClose, getAuthHeaders }) => {
   };
 
   const handleDomainClick = (domain) => {
+    // ✅ Check premium before opening download modal
+    if (!isPremium) {
+      onOpenUpgradeModal();
+      return;
+    }
+
     setSelectedDomain(domain);
     setDownloadModalOpen(true);
   };
 
-  // Open Google Drive directly
+  // Open Google Drive directly (only for premium users)
   const handleDownload = (type) => {
     if (!selectedDomain) return;
+
+    // ✅ Double-check premium status
+    if (!isPremium) {
+      setDownloadModalOpen(false);
+      onOpenUpgradeModal();
+      return;
+    }
 
     try {
       const folderId = selectedDomain.gdrive_folder_id;
@@ -103,7 +119,7 @@ const Library = ({ isOpen, onClose, getAuthHeaders }) => {
     }
   };
 
-  // Optional: Track downloads in backend
+  // Track downloads in backend
   const trackDownload = async (domainId, type) => {
     try {
       await fetch(`http://localhost:8000/api/library/track-download`, {
@@ -130,9 +146,18 @@ const Library = ({ isOpen, onClose, getAuthHeaders }) => {
         {/* Header */}
         <div className="p-6 border-b border-white/30">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-3xl font-bold bg-gradient-to-r from-[#5ac8fa] to-[#007aff] bg-clip-text text-transparent">
-              📚 Data Library
-            </h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-3xl font-bold bg-gradient-to-r from-[#5ac8fa] to-[#007aff] bg-clip-text text-transparent">
+                📚 Data Library
+              </h2>
+              {/* ✅ Premium Badge */}
+              {!isPremium && (
+                <span className="px-3 py-1 bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-sm font-semibold rounded-full flex items-center gap-1 shadow-md">
+                  <Crown size={14} />
+                  Premium Only
+                </span>
+              )}
+            </div>
             <button
               onClick={onClose}
               className="text-black/60 hover:text-black transition-colors"
@@ -207,21 +232,31 @@ const Library = ({ isOpen, onClose, getAuthHeaders }) => {
           ) : viewMode === 'grid' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {filteredDomains.map(domain => (
-                <DomainCard key={domain.id} domain={domain} onClick={() => handleDomainClick(domain)} />
+                <DomainCard 
+                  key={domain.id} 
+                  domain={domain} 
+                  onClick={() => handleDomainClick(domain)}
+                  isPremium={isPremium}
+                />
               ))}
             </div>
           ) : (
             <div className="space-y-2">
               {filteredDomains.map(domain => (
-                <DomainListItem key={domain.id} domain={domain} onClick={() => handleDomainClick(domain)} />
+                <DomainListItem 
+                  key={domain.id} 
+                  domain={domain} 
+                  onClick={() => handleDomainClick(domain)}
+                  isPremium={isPremium}
+                />
               ))}
             </div>
           )}
         </div>
       </div>
 
-      {/* Download Modal */}
-      {downloadModalOpen && selectedDomain && (
+      {/* Download Modal (only for premium users) */}
+      {downloadModalOpen && selectedDomain && isPremium && (
         <DownloadModal
           domain={selectedDomain}
           onClose={() => setDownloadModalOpen(false)}
@@ -232,8 +267,8 @@ const Library = ({ isOpen, onClose, getAuthHeaders }) => {
   );
 };
 
-// Domain Card Component
-const DomainCard = ({ domain, onClick }) => {
+// ✅ Updated Domain Card Component
+const DomainCard = ({ domain, onClick, isPremium }) => {
   const categoryColors = {
     'Government': 'bg-blue-500',
     'Economic': 'bg-green-500',
@@ -268,18 +303,28 @@ const DomainCard = ({ domain, onClick }) => {
         <span className="text-black/60">{domain.total_size_readable}</span>
       </div>
 
-      <button className="mt-3 w-full bg-gradient-to-r from-[#5ac8fa] to-[#007aff] 
-                         hover:from-[#007aff] hover:to-[#005bbb]
-                         text-white py-2 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-md">
-        <Download size={16} />
-        Download
-      </button>
+      {/* ✅ Conditional Button */}
+      {isPremium ? (
+        <button className="mt-3 w-full bg-gradient-to-r from-[#5ac8fa] to-[#007aff] 
+                           hover:from-[#007aff] hover:to-[#005bbb]
+                           text-white py-2 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-md">
+          <Download size={16} />
+          Download
+        </button>
+      ) : (
+        <button className="mt-3 w-full bg-gradient-to-r from-yellow-400 to-orange-500
+                           hover:from-yellow-500 hover:to-orange-600
+                           text-white py-2 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-md">
+          <Crown size={16} />
+          Upgrade to Download
+        </button>
+      )}
     </div>
   );
 };
 
-// Domain List Item Component
-const DomainListItem = ({ domain, onClick }) => {
+// ✅ Updated Domain List Item Component
+const DomainListItem = ({ domain, onClick, isPremium }) => {
   return (
     <div
       onClick={onClick}
@@ -302,17 +347,26 @@ const DomainListItem = ({ domain, onClick }) => {
           <div className="text-black/60 text-sm">{domain.total_size_readable}</div>
         </div>
 
-        <button className="bg-gradient-to-r from-[#5ac8fa] to-[#007aff] hover:from-[#007aff] hover:to-[#005bbb]
-                           text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 shadow-md">
-          <Download size={16} />
-          Download
-        </button>
+        {/* ✅ Conditional Button */}
+        {isPremium ? (
+          <button className="bg-gradient-to-r from-[#5ac8fa] to-[#007aff] hover:from-[#007aff] hover:to-[#005bbb]
+                             text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 shadow-md">
+            <Download size={16} />
+            Download
+          </button>
+        ) : (
+          <button className="bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600
+                             text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 shadow-md">
+            <Crown size={16} />
+            Upgrade to Download
+          </button>
+        )}
       </div>
     </div>
   );
 };
 
-// Download Modal Component
+// Download Modal Component (unchanged)
 const DownloadModal = ({ domain, onClose, onDownload }) => {
   return (
     <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 backdrop-blur-md">

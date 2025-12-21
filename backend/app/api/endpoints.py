@@ -188,12 +188,11 @@ async def get_user_status(current_user: UserInfo):
             "user": current_user,
             "chat_count": user_data.get('chat_count', 0) if user_data else 0,
             "remaining_chats": remaining_chats,
-            "can_chat": remaining_chats > 0,
+            "can_chat": remaining_chats > 0 or remaining_chats == -1,  # ✅ FIXED!
             "is_premium": user_data.get('is_premium', False) if user_data else False,
             "created_at": user_data.get('created_at') if user_data else None,
             "last_activity": user_data.get('last_activity') if user_data else None
-        }
-        
+        }        
     except Exception as e:
         logger.error(f"Error getting user status: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error getting status: {str(e)}")
@@ -202,7 +201,11 @@ async def get_user_status(current_user: UserInfo):
 async def check_chat_limits(current_user: UserInfo):
     """Check user's chat limits"""
     remaining_chats = firebase_service.get_remaining_chats(current_user.google_id)
-    can_chat = remaining_chats > 0
+    can_chat = remaining_chats > 0 or remaining_chats == -1  # ✅ FIXED!
+    
+    # ✅ Check if user is premium
+    user_data = firebase_service.get_user(current_user.google_id)
+    is_premium = user_data.get('is_premium', False) if user_data else False
     
     if not can_chat:
         return ChatLimitResponse(
@@ -211,10 +214,16 @@ async def check_chat_limits(current_user: UserInfo):
             is_premium=False
         )
     
+    # ✅ Better message for premium users
+    if remaining_chats == -1:
+        message = "You have unlimited chats (Premium)"
+    else:
+        message = f"You have {remaining_chats} free chats remaining."
+    
     return ChatLimitResponse(
-        message=f"You have {remaining_chats} free chats remaining.",
+        message=message,
         remaining_chats=remaining_chats,
-        is_premium=False
+        is_premium=is_premium  # ✅ FIXED!
     )
 
 

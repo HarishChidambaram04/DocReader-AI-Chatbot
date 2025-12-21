@@ -261,8 +261,13 @@ const RAGChatbot = () => {
         onNewConversation={handleNewConversation}
         onDeleteConversation={handleDeleteConversation}
         isLoading={conversationsLoading}
-        getAuthHeaders={getAuthHeaders}  
+        getAuthHeaders={getAuthHeaders}
+        // NEW: Pass premium info to SidePanel
+        user={user}
+        chatLimits={chatLimits}
+        onOpenUpgradeModal={handleOpenUpgradeModal}
       />
+
 
       <div
         className={`flex flex-col flex-1 transition-all duration-300 ${

@@ -108,11 +108,24 @@ export const useAuth = () => {
       if (response.ok) {
         const data = await response.json();
         
-        // ✅ FIX 2: Handle -1 for unlimited
+        console.log('📊 Fetched user status:', data);  // ✅ Debug log
+        
+        // ✅ Update user data
+        if (data.user) {
+          setUser(data.user);
+          localStorage.setItem('user_info', JSON.stringify(data.user));
+        }
+        
+        // ✅ Update chat limits with premium support
+        const remaining = data.remaining_chats ?? data.remaining ?? -1;
+        const used = data.chat_count ?? data.used ?? 0;
+        
+        console.log('💎 Setting chat limits:', { remaining, used, isPremium: remaining === -1 });
+        
         setChatLimits({
-          remaining: data.remaining_chats,
-          used: data.chat_count,
-          canChat: data.remaining_chats > 0 || data.remaining_chats === -1  // ✅ FIXED!
+          remaining: remaining,
+          used: used,
+          canChat: remaining > 0 || remaining === -1
         });
       } else if (response.status === 401) {
         logout();
@@ -121,6 +134,7 @@ export const useAuth = () => {
       console.error('Error fetching user status:', error);
     }
   }, [token, logout]);
+
 
   // Check if user can chat
   const checkChatLimits = useCallback(async () => {
