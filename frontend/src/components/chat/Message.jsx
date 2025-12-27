@@ -1,4 +1,3 @@
-// components/chat/Message.jsx
 import React from 'react';
 import { Bot, User } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -10,6 +9,7 @@ const Message = ({ message }) => {
   // Custom components for ReactMarkdown
   const components = {
     strong: ({ node, ...props }) => {
+      // Check if this strong element is the first child of its parent
       const parent = node?.position?.start?.line;
       const isFirstElement = parent === 1 || node?.position?.start?.column === 1;
       
@@ -24,12 +24,11 @@ const Message = ({ message }) => {
 
   return (
     <div
-      className={`flex items-start gap-2 md:gap-4 ${
-        message.type === 'user' ? 'flex-row-reverse' : ''
+      className={`flex items-start space-x-4 ${
+        message.type === 'user' ? 'flex-row-reverse space-x-reverse' : ''
       }`}
     >
-      {/* ✅ Responsive Avatar */}
-      <div className={`flex-shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center shadow-lg ${
+      <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow-lg ${
         message.type === 'user'
           ? 'bg-gradient-to-r from-blue-500 to-cyan-500'
           : message.isError
@@ -37,20 +36,16 @@ const Message = ({ message }) => {
           : 'bg-gradient-to-r from-blue-500 to-cyan-500' 
       }`}>
         {message.type === 'user' ? (
-          <User className="w-4 h-4 md:w-5 md:h-5 text-white" />
+          <User className="w-5 h-5 text-white" />
         ) : (
-          <Bot className="w-4 h-4 md:w-5 md:h-5 text-white" />
+          <Bot className="w-5 h-5 text-white" />
         )}
       </div>
       
-      {/* ✅ Responsive Message Container */}
-      <div className={`flex-1 min-w-0 ${
-        message.type === 'user' ? 'flex flex-col items-end' : 'flex flex-col items-start'
+      <div className={`flex-1 max-w-3xl ${
+        message.type === 'user' ? 'text-right' : 'text-left'
       }`}>
-        
-        {/* ✅ Message Bubble with Responsive Max-Width */}
-        <div className={`inline-block p-3 md:p-4 rounded-2xl shadow-xl backdrop-blur-sm border
-                         max-w-[85%] sm:max-w-[75%] md:max-w-[85%] lg:max-w-2xl break-words ${
+        <div className={`inline-block p-4 rounded-2xl shadow-xl backdrop-blur-sm border ${
           message.type === 'user'
             ? 'bg-gradient-to-r from-blue-500/90 to-cyan-500/90 text-white border-blue-400/30'
             : message.isError
@@ -58,29 +53,21 @@ const Message = ({ message }) => {
             : 'bg-white/40 text-black border-white/20'
         }`}>
           {message.type === 'bot' ? (
-            <div className="prose prose-sm md:prose-base max-w-none">
-              <ReactMarkdown 
-                remarkPlugins={[remarkGfm]}
-                components={components}
-                className="text-sm md:text-base"
-              >
-                {message.content}
-              </ReactMarkdown>
-            </div>
-          ) : (
-            <p className="whitespace-pre-wrap leading-relaxed text-sm md:text-base">
+            <ReactMarkdown 
+              remarkPlugins={[remarkGfm]}
+              components={components}
+            >
               {message.content}
-            </p>
+            </ReactMarkdown>
+          ) : (
+            <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
           )}
           
-          {/* Sources - uncomment if needed */}
+          {/* Temporarily disabled - uncomment to show sources */}
           {/* <MessageSources sources={message.sources} /> */}
         </div>
         
-        {/* ✅ Responsive Timestamp */}
-        <div className={`text-[10px] md:text-xs text-gray-700 mt-1 md:mt-2 px-1 ${
-          message.type === 'user' ? 'text-right' : 'text-left'
-        }`}>
+        <div className="text-xs text-gray-700 mt-2">
           {formatTimestamp(message.timestamp)}
         </div>
       </div>
