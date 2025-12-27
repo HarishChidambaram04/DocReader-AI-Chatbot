@@ -18,7 +18,7 @@ class Settings:
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
     # Models
-    EMBEDDING_MODEL = "BAAI/bge-large-en-v1.5"
+    EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
     LLM_MODEL = "llama-3.1-8b-instant"
     LLM_TEMPERATURE = 0
 
